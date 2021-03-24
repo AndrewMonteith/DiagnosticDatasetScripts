@@ -5,7 +5,6 @@ import os.path
 
 from pathlib import Path
 from typing import List
-from dataclasses import dataclass
 
 from githelpers import get_all_commits
 
@@ -35,15 +34,6 @@ class Diagnostic:
         self._type = get_diag_type(lines[2])
         self._message = lines[2]
 
-    # def __eq__(self, other):
-    #     return self._file == other._file and \
-    #         self._line == other._line and \
-    #         self._col == other._col and \
-    #         self._start == other._start and \
-    #         self._pos == other._pos and \
-    #         self._end == other._end and \
-    #         self._message == other._message
-
     def __eq__(self, other):
         return self._file == other._file and \
             self._line == other._line and \
@@ -56,9 +46,6 @@ class Diagnostic:
 
     def __str__(self):
         return '\n'.join(self._raw)
-
-    # def __hash__(self):
-    #     return hash((self._file, self._line, self._col, self._start, self._pos, self._end, self._type))
 
     def __hash__(self):
         return hash((self._file, self._line, self._col, self._type, self._end - self._start))
@@ -105,12 +92,12 @@ def read_stripped_lines(file):
     return [line.strip() for line in open(file).readlines()]
 
 
-@dataclass(frozen=True)
 class DiagnosticsFile:
-    file: Path
-    seq: int
-    commit: str
-    diagnostics: List[Diagnostic]
+    def __init__(self, file: Path, seq:int, commit: str, diagnostics: List[Diagnostic]):
+        self.file = file
+        self.seq = seq
+        self.commit = commit
+        self.diagnostics = diagnostics
 
     @classmethod
     def load(cls, file: Path):
@@ -213,9 +200,6 @@ class DiagnosticsDiff:
         pre = f"{self.pre} {'' if self.pre_commit is None else self.pre_commit}"
         post = f"{self.post} {'' if self.post_commit is None else self.post_commit}"
         return f"{pre} -> {post}"
-
-    # def __str__(self):
-    #     return f"{self.pre} -> {self.post}"
 
     @classmethod
     def load_all(cls, folder: Path):
