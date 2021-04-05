@@ -59,21 +59,17 @@ def get_diffs(diffs: List[DiagnosticsDiff], pre_commit: str, post_commit: str):
 
 
 def guess_if_compilation_failed(diags, diag, commit):
-    print("leaves in commit", commit)
     i = next(i for (i, diag) in enumerate(diags)
              if diag.commit == commit)
-    print("file",diags[i])
+
     if diag in diags[i].diagnostics:
-        print("it's in this diagnostics")
         return False
 
     if i == 0 or i == len(diags):
-        print("at endpoints")
         return False
 
     before = diags[i-1]
     after = diags[i+1]
-    print("looking between", before.commit, after.commit)
 
     return diag in before.diagnostics and diag in after.diagnostics
 
@@ -85,8 +81,8 @@ def print_missed_interesting_stuff_2(project: Path,
                                      hr_diffs: List[DiagnosticsDiff]):
     merged_diags = merge_diagnostics(project, lr_diags, hr_diags)
 
-    missed_diags = 0
-    zombie_diags = 0
+    missed_diags = []
+    zombie_diags = []
 
     for (lr_pre, lr_post) in consecutive_pairs(lr_diags):
         between_commits = find_commits_between(merged_diags, lr_pre, lr_post)
@@ -110,12 +106,12 @@ def print_missed_interesting_stuff_2(project: Path,
                     hr_diffs, added_diag, start=enters, end=next_lr_commit)
 
                 if leaves != next_lr_commit:
-                    print(
-                        f"Following diagnostic lost by lower resolution between {lr_diff}")
-                    print(added_diag)
-                    print(
-                        f"It enters at {hr_diffs[enters].pre_commit} then leaves at {hr_diffs[leaves].post_commit}")
-                    missed_diags += 1
+                    missed_diags.append({
+                        "diag": added_diag,
+                        "lr_diff": lr_diff,
+                        "enters": hr_diffs[enters].post_commit,
+                        "leaves": hr_diffs[leaves].post_commit
+                    })
 
         # Interesting 2) Diagnostics that leave and reenter in a high res commit
         between_hr_diffs = get_diffs(hr_diffs, lr_pre.commit, lr_post.commit)
@@ -123,17 +119,34 @@ def print_missed_interesting_stuff_2(project: Path,
         for (old, _) in lr_diff.matches.items():
             leaves = find_when_leaves(between_hr_diffs, old)
             if leaves != len(between_hr_diffs) and not guess_if_compilation_failed(merged_diags, old, between_hr_diffs[leaves].post_commit):
-            # if leaves != len(between_hr_diffs):
-                zombie_diags += 1
+                zombie_diags.append({
+                    "diag": old,
+                    "lr_diff": lr_diff,
+                    "leaves": between_hr_diffs[leaves]
+                })
 
-                print("Diagnostic:", old)
-                print("Was tracked between low res ", lr_diff)
-                print("However was unmatched across lower res",
-                      between_hr_diffs[leaves])
+    print()
+    print("---------------")
+    print("--- Results ---")
+    print("---------------")
+    print()
 
+    print("=== Missed Diagnostis===")
+    print("Total", len(missed_diags))
+    for missed in missed_diags:
+        print(f"  Following diagnostic lost by {missed['lr_diff']}")
+        print(missed["diag"])
+        print(
+            f"  It enters at {missed['enters']} and leaves {missed['leaves']}")
+    print()
 
-    print("Missed diagnostics", missed_diags)
-    print("Zombie diagnostics", zombie_diags)
+    print("=== Zombie Diagnostics ===")
+    print("Total", len(zombie_diags))
+    for zombie in zombie_diags:
+        print(f"  Following diagnostic tracked by {zombie['lr_diff']}")
+        print(zombie["diag"])
+        print(f"  Could not track across {zombie['leaves']}")
+
 
 if __name__ == "__main__":
     project = Path(sys.argv[1])

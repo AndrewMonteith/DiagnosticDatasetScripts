@@ -114,6 +114,14 @@ class DiagnosticsFile:
             if file.is_file() and not file.name.endswith(".skip")
         ])
 
+    def save(self, out: Path):
+        with open(out, "w") as f:
+            f.write(f"{self.commit} {len(self.diagnostics)}\n")
+            for diag in self.diagnostics:
+                f.write(str(diag) + "\n")
+
+
+
     def __eq__(self, other):
         return self.commit == other.commit
 

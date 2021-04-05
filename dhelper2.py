@@ -7,6 +7,8 @@ import re
 from diag_utils import DiagnosticsFile, Diagnostic
 from pathlib import Path
 
+from typing import List
+
 ENDS_WITH_NUMBERS = re.compile(r".*_(\d+)$")
 
 
@@ -76,8 +78,7 @@ def weird(folder1: Path, folder2: Path):
 
 def consensus(folders):
     files = [file for folder in folders
-             for file in DiagnosticsFile.load_all(folder)
-             if file.is_file() and not file.endswith(".skip")]
+             for file in DiagnosticsFile.load_all(folder)]
 
     # Group by commit
     commits = {}
@@ -106,6 +107,60 @@ def consensus(folders):
                 shutil.copy(most_diags.file, diag_file.file)
 
 
+def print_file_diff(file1: Path, file2: Path):
+    diag_file_1 = DiagnosticsFile.load(file1)
+    diag_file_2 = DiagnosticsFile.load(file2)
+
+    # Compare difference at file level
+    files_1 = [diag._file for diag in diag_file_1.diagnostics]
+    files_2 = [diag._file for diag in diag_file_2.diagnostics]
+
+    freqs_1 = {file: files_1.count(file) for file in files_1}
+    freqs_2 = {file: files_2.count(file) for file in files_2}
+
+    shared_files = freqs_1.keys() & freqs_2.keys()
+    for file in shared_files:
+        freq_1 = freqs_1[file]
+        freq_2 = freqs_2[file]
+
+        if freq_1 != freq_2:
+            print(file, freq_1, "->", freq_2)
+
+    for (file, freq) in freqs_1.items():
+        if file not in shared_files:
+            print('File "deleted"', file, freq)
+
+    for (file, freq) in freqs_2.items():
+        if file not in shared_files:
+            print('File "added" ', file, freq)
+
+
+def remove_diag_type(diag_type: str, files: List[Path]):
+    diag_files = [DiagnosticsFile.load(file) for file in files]
+
+    for diag_file in diag_files:
+        diag_file.diagnostics = [
+            diag
+            for diag in diag_file.diagnostics
+            if diag._type != diag_type
+        ]
+
+    for diag_file in diag_files:
+        diag_file.save(diag_file.file.with_suffix(".filtered"))
+
+def remove_file(filename: str, files: List[Path]):
+    diag_files = [DiagnosticsFile.load(file) for file in files]
+
+    for diag_file in diag_files:
+        diag_file.diagnostics = [
+            diag
+            for diag in diag_file.diagnostics
+            if filename not in diag._file
+        ]
+
+    for diag_file in diag_files:
+        diag_file.save(diag_file.file.with_suffix(".filtered"))
+
 
 if __name__ == "__main__":
     cmd = sys.argv[1]
@@ -121,3 +176,11 @@ if __name__ == "__main__":
         stitch_together(project, output, folders)
     elif cmd == "consensus":
         consensus([Path(folder) for folder in sys.argv[2:]])
+    elif cmd == "file-diff":
+        print_file_diff(Path(sys.argv[2]), Path(sys.argv[3]))
+    elif cmd == "remove-diag-type":
+        remove_diag_type(sys.argv[2], [Path(file) for file in sys.argv[3:]])
+    elif cmd == "remove-file":
+        remove_file(sys.argv[2], [Path(file) for file in sys.argv[3:]])
+    else:
+        raise Exception(cmd + " does not exist")
