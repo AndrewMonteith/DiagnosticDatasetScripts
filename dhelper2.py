@@ -135,31 +135,42 @@ def print_file_diff(file1: Path, file2: Path):
             print('File "added" ', file, freq)
 
 
-def remove_diag_type(diag_type: str, files: List[Path]):
-    diag_files = [DiagnosticsFile.load(file) for file in files]
+def file_mutator(mutate_diag_file):
+    def map_files(files: List[Path], *args):
+        diag_files = [DiagnosticsFile.load(file) for file in files]
 
-    for diag_file in diag_files:
-        diag_file.diagnostics = [
-            diag
-            for diag in diag_file.diagnostics
-            if diag._type != diag_type
-        ]
+        for diag_file in diag_files:
+            mutate_diag_file(diag_file, *args)
+            diag_file.save(diag_file.file.with_suffix(".new"))
 
-    for diag_file in diag_files:
-        diag_file.save(diag_file.file.with_suffix(".filtered"))
+    return map_files
 
-def remove_file(filename: str, files: List[Path]):
-    diag_files = [DiagnosticsFile.load(file) for file in files]
 
-    for diag_file in diag_files:
-        diag_file.diagnostics = [
-            diag
-            for diag in diag_file.diagnostics
-            if filename not in diag._file
-        ]
+@file_mutator
+def remove_diag_type(diag_file: DiagnosticsFile, diag_type: str):
+    diag_file.diagnostics = [
+        diag
+        for diag in diag_file.diagnostics
+        if diag_type not in diag._type
+    ]
 
-    for diag_file in diag_files:
-        diag_file.save(diag_file.file.with_suffix(".filtered"))
+
+@file_mutator
+def remove_file(diag_file: DiagnosticsFile, filename: str):
+    diag_file.diagnostics = [
+        diag
+        for diag in diag_file.diagnostics
+        if filename not in diag._file
+    ]
+
+
+@file_mutator
+def filter_file(diag_file: DiagnosticsFile, filename: str):
+    diag_file.diagnostics = [
+        diag
+        for diag in diag_file.diagnostics
+        if filename in diag._file
+    ]
 
 
 if __name__ == "__main__":
@@ -179,8 +190,10 @@ if __name__ == "__main__":
     elif cmd == "file-diff":
         print_file_diff(Path(sys.argv[2]), Path(sys.argv[3]))
     elif cmd == "remove-diag-type":
-        remove_diag_type(sys.argv[2], [Path(file) for file in sys.argv[3:]])
+        remove_diag_type([Path(file) for file in sys.argv[3:]], sys.argv[2])
     elif cmd == "remove-file":
-        remove_file(sys.argv[2], [Path(file) for file in sys.argv[3:]])
+        remove_file([Path(file) for file in sys.argv[3:]], sys.argv[2])
+    elif cmd == "filter-file":
+        filter_file([Path(file) for file in sys.argv[3:]], sys.argv[2])
     else:
         raise Exception(cmd + " does not exist")
