@@ -141,7 +141,8 @@ def file_mutator(mutate_diag_file):
 
         for diag_file in diag_files:
             mutate_diag_file(diag_file, *args)
-            diag_file.save(diag_file.file.with_suffix(".new"))
+            suffix = ".skip.new" if diag_file.file.suffix == ".skip" else ".new"
+            diag_file.save(diag_file.file.with_suffix(suffix))
 
     return map_files
 
@@ -173,6 +174,52 @@ def filter_file(diag_file: DiagnosticsFile, filename: str):
     ]
 
 
+cache = {}
+
+last_commit = ""
+
+
+def does_file_exist(project: Path, commit: str, file: str):
+    global last_commit, cache
+
+    if last_commit != commit:
+        githelpers.checkout(project, commit)
+
+    last_commit = commit
+
+    fid = commit + file
+    if fid not in cache:
+        cache[fid] = (project / file).is_file()
+
+    return cache[fid]
+
+
+@file_mutator
+def remove_missing_files(diag_file: DiagnosticsFile, project: Path):
+    print(f"{diag_file.seq} {diag_file.commit}")
+
+    files = githelpers.get_all_files_in_commit(project, diag_file.commit)
+
+    diag_file.diagnostics = [
+        diag
+        for diag in diag_file.diagnostics
+        if diag._file in files
+    ]
+
+
+def get_relative_file(filepath):
+    split = filepath.split("/")
+    corpus_i = split.index("java-corpus")
+
+    return '/'.join(split[corpus_i+2:])  # skip ROOT/java-corpus/<project-name>
+
+
+@file_mutator
+def relative_files(diag_file):
+    for diag in diag_file.diagnostics:
+        diag._file = get_relative_file(diag._file)
+
+
 if __name__ == "__main__":
     cmd = sys.argv[1]
 
@@ -195,5 +242,10 @@ if __name__ == "__main__":
         remove_file([Path(file) for file in sys.argv[3:]], sys.argv[2])
     elif cmd == "filter-file":
         filter_file([Path(file) for file in sys.argv[3:]], sys.argv[2])
+    elif cmd == "remove-missing-files":
+        remove_missing_files([Path(file)
+                              for file in sys.argv[3:]], Path(sys.argv[2]))
+    elif cmd == "relative-files":
+        relative_files([Path(file) for file in sys.argv[2:]])
     else:
         raise Exception(cmd + " does not exist")

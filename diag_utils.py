@@ -25,7 +25,7 @@ class Diagnostic:
         loc_info = lines[1].split(" ")
 
         self._raw = lines[:]
-        self._file = get_relative_file(loc_info[0])
+        self._file = loc_info[0]
         self._line = int(loc_info[1])
         self._col = int(loc_info[2])
         self._start = int(loc_info[3])
@@ -45,7 +45,12 @@ class Diagnostic:
         return f"({self._file} {self._type} {self._line} {self._col} {self._start} {self._end})"
 
     def __str__(self):
-        return '\n'.join(self._raw)
+        return '\n'.join([
+            "----DIAGNOSTIC",
+            f"{self._file} {self._line} {self._col} {self._start} {self._pos} {self._end}",
+            *self._raw[2:]
+        ])
+        # return '\n'.join(self._raw)
 
     def __hash__(self):
         return hash((self._file, self._line, self._col, self._type, self._end - self._start))
