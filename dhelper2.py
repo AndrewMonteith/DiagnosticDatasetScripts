@@ -243,8 +243,10 @@ def sort_diag_descriptions(diag_file, diag_type: str):
             sorted(diag._raw[2:])
         ]
 
+        return diag
+
     diag_file.diagnostics = [
-        sort_diag_desc(diag) if diag._type == diag_type else diag
+        sort_diag_desc(diag) if diag_type in diag._type else diag
         for diag in diag_file.diagnostics
     ]
 

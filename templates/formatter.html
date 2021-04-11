@@ -47,10 +47,11 @@
     var src;
 
     function formatCode() {
-        fetch("http://localhost:5000/format/", {
+        fetch("format/", {
             method: "POST",
             headers: {
-                "Content-Type": "application/json"
+                "Content-Type": "application/json",
+                "Access-Control-Allow-Origin": "http://localhost:5000"
             },
             body: JSON.stringify({"code": src.value})
         }).then(resp => resp.text())
