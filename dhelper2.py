@@ -3,6 +3,7 @@ import sys
 import githelpers
 import shutil
 import re
+import os
 
 from diag_utils import DiagnosticsFile, Diagnostic
 from pathlib import Path
@@ -137,7 +138,9 @@ def print_file_diff(file1: Path, file2: Path):
 
 def file_mutator(mutate_diag_file):
     def map_files(files: List[Path], *args):
-        diag_files = [DiagnosticsFile.load(file) for file in files]
+        diag_files = [DiagnosticsFile.load(file)
+                      for file in files
+                      if not ".skip" in file.suffix]
 
         for diag_file in diag_files:
             mutate_diag_file(diag_file, *args)
@@ -208,6 +211,9 @@ def remove_missing_files(diag_file: DiagnosticsFile, project: Path):
 
 
 def get_relative_file(filepath):
+    if not "java-corpus" in str(filepath):
+        return filepath
+
     split = filepath.split("/")
     corpus_i = split.index("java-corpus")
 
@@ -218,6 +224,35 @@ def get_relative_file(filepath):
 def relative_files(diag_file):
     for diag in diag_file.diagnostics:
         diag._file = get_relative_file(diag._file)
+
+
+@file_mutator
+def stitch_files(diag_file, other_files: List[Path]):
+    other_file = DiagnosticsFile.load(next((file for file in other_files
+                                            if diag_file.commit in file.name)))
+
+    diag_file.diagnostics = [*diag_file.diagnostics, *other_file.diagnostics]
+
+
+@file_mutator
+def sort_diag_descriptions(diag_file, diag_type: str):
+    def sort_diag_desc(diag: Diagnostic):
+        diag._raw = [
+            diag._raw[0],
+            diag._raw[1],
+            sorted(diag._raw[2:])
+        ]
+
+    diag_file.diagnostics = [
+        sort_diag_desc(diag) if diag._type == diag_type else diag
+        for diag in diag_file.diagnostics
+    ]
+
+
+def list_files(folder: Path):
+    return [folder / file
+            for file in os.listdir(folder)
+            if os.path.isfile(os.path.join(folder, file))]
 
 
 if __name__ == "__main__":
@@ -247,5 +282,11 @@ if __name__ == "__main__":
                               for file in sys.argv[3:]], Path(sys.argv[2]))
     elif cmd == "relative-files":
         relative_files([Path(file) for file in sys.argv[2:]])
+    elif cmd == "merge":
+        stitch_files([Path(file) for file in sys.argv[3:]],
+                     list_files(Path(sys.argv[2])))
+    elif cmd == "sort-diag-desc":
+        sort_diag_descriptions([Path(file)
+                                for file in sys.argv[3:]], sys.argv[2])
     else:
         raise Exception(cmd + " does not exist")

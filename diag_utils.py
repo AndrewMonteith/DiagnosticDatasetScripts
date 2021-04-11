@@ -9,13 +9,6 @@ from typing import List
 from githelpers import get_all_commits
 
 
-def get_relative_file(filepath):
-    split = filepath.split("/")
-    corpus_i = split.index("java-corpus")
-
-    return '/'.join(split[corpus_i+2:])  # skip ROOT/java-corpus/<project-name>
-
-
 def get_diag_type(diag_msg):
     return diag_msg.split(" ")[0]  # "[Diag-Type] other information"
 
@@ -98,7 +91,7 @@ def read_stripped_lines(file):
 
 
 class DiagnosticsFile:
-    def __init__(self, file: Path, seq:int, commit: str, diagnostics: List[Diagnostic]):
+    def __init__(self, file: Path, seq: int, commit: str, diagnostics: List[Diagnostic]):
         self.file = file
         self.seq = seq
         self.commit = commit
@@ -124,8 +117,6 @@ class DiagnosticsFile:
             f.write(f"{self.commit} {len(self.diagnostics)}\n")
             for diag in self.diagnostics:
                 f.write(str(diag) + "\n")
-
-
 
     def __eq__(self, other):
         return self.commit == other.commit
