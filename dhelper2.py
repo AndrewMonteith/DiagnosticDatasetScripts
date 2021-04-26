@@ -240,7 +240,7 @@ def sort_diag_descriptions(diag_file, diag_type: str):
         diag._raw = [
             diag._raw[0],
             diag._raw[1],
-            sorted(diag._raw[2:])
+            *sorted(diag._raw[2:])
         ]
 
         return diag
@@ -248,6 +248,15 @@ def sort_diag_descriptions(diag_file, diag_type: str):
     diag_file.diagnostics = [
         sort_diag_desc(diag) if diag_type in diag._type else diag
         for diag in diag_file.diagnostics
+    ]
+
+
+@file_mutator
+def filter_diag_type(diag_file, diag_type: str):
+    diag_file.diagnostics = [
+        diag 
+        for diag in diag_file.diagnostics
+        if diag_type in diag._type
     ]
 
 
@@ -277,6 +286,8 @@ if __name__ == "__main__":
         remove_diag_type([Path(file) for file in sys.argv[3:]], sys.argv[2])
     elif cmd == "remove-file":
         remove_file([Path(file) for file in sys.argv[3:]], sys.argv[2])
+    elif cmd == "filter-diag-type":
+        filter_diag_type([Path(file) for file in sys.argv[3:]], sys.argv[2])
     elif cmd == "filter-file":
         filter_file([Path(file) for file in sys.argv[3:]], sys.argv[2])
     elif cmd == "remove-missing-files":

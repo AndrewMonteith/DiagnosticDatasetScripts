@@ -1,5 +1,7 @@
 import subprocess
+import shutil
 import tempfile
+import re
 
 from pathlib import Path
 from typing import List
@@ -45,3 +47,50 @@ def get_all_files_in_commit(project: Path, commit: str):
 
     return set((get_file_name(line)
                 for line in proc.stdout.decode("utf-8").split("\n")))
+
+
+def get_changed_java_files(project: Path, pre_commit: str, post_commit: str):
+    proc = subprocess.run(["git", "diff", "--name-only", pre_commit, post_commit],
+                          cwd=project, stdout=subprocess.PIPE)
+
+    changed_files = proc.stdout.decode("utf-8").split("\n")
+
+    return set((changed_file
+                for changed_file in changed_files
+                if len(changed_file) > 0 and Path(changed_file).suffix == ".java"))
+
+
+def load_file(project: Path, commit: str, file: str):
+    proc = subprocess.run(["git", "show", commit + ":" + str(file)],
+                          cwd=project, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+    src = proc.stdout.decode("utf-8")
+    if f"'{commit}'" in src:
+        return "Does not exist", False
+    else:
+        return src, True
+
+
+def init(project: Path):
+    git_folder = project / ".git"
+    if git_folder.is_dir():
+        shutil.rmtree(git_folder)
+
+    subprocess.run(["git", "init"], cwd=project, stdout=subprocess.PIPE)
+
+
+extract_commit_re = re.compile(r" (\w+)\]")
+
+
+def commit_all(project: Path):
+    subprocess.run(["git", "add", "-A"], cwd=project, stdout=subprocess.PIPE)
+
+    proc = subprocess.run(
+        ["git", "commit", "-m", "'commit'"], cwd=project, stdout=subprocess.PIPE)
+    commit_match = re.search(extract_commit_re, proc.stdout.decode("utf-8"))
+    short_commit = commit_match.group(1)
+
+    all_commits = get_all_commits(project)
+    
+    return next(commit for commit in all_commits
+                if commit.startswith(short_commit))

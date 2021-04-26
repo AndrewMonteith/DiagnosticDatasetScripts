@@ -25,7 +25,10 @@ class Diagnostic:
         self._pos = int(loc_info[4])
         self._end = int(loc_info[5])
         self._type = get_diag_type(lines[2])
-        self._message = lines[2]
+
+        self._message = "\n".join(
+            lines[2:-1] if "Signature:" in lines[-1] else lines[2:]
+            )
 
     def __eq__(self, other):
         return self._file == other._file and \
@@ -43,7 +46,6 @@ class Diagnostic:
             f"{self._file} {self._line} {self._col} {self._start} {self._pos} {self._end}",
             *self._raw[2:]
         ])
-        # return '\n'.join(self._raw)
 
     def __hash__(self):
         return hash((self._file, self._line, self._col, self._type, self._end - self._start))
@@ -92,6 +94,7 @@ def read_stripped_lines(file):
 
 class DiagnosticsFile:
     def __init__(self, file: Path, seq: int, commit: str, diagnostics: List[Diagnostic]):
+        print("Loading",file)
         self.file = file
         self.seq = seq
         self.commit = commit
@@ -99,7 +102,7 @@ class DiagnosticsFile:
 
     @classmethod
     def load(cls, file: Path):
-        seq, commit = file.stem.split(" ")
+        seq, commit = file.with_suffix('').stem.split(" ")
         diagnostics = list(parse_diagnostics(read_stripped_lines(file)))
 
         return cls(file, int(seq), commit, diagnostics)
@@ -131,17 +134,26 @@ class DiagnosticsFile:
         return self.commit
 
 
+def strip_grain_info(file):
+    if "." in file:
+        return file[:file.index(".")]
+    else:
+        return file
+
+
 class DiagnosticsDiff:
     "Describes the differences in diagnostics between two commits"
 
     def __init__(self, file: Path):
+        print(file)
+        self.file = file
         # "<pre> [commit] -> <post> [commit]"
         file_split = file.stem.split(" ")
         if len(file_split) == 5:
             self.pre = int(file_split[0])
-            self.pre_commit = file_split[1]
+            self.pre_commit = strip_grain_info(file_split[1])
             self.post = int(file_split[3])
-            self.post_commit = file_split[4]
+            self.post_commit = strip_grain_info(file_split[4])
         else:
             self.pre = int(file_split[0])
             self.post = int(file_split[2])
@@ -154,9 +166,16 @@ class DiagnosticsDiff:
 
     def _read_matches(self, lines):
         for match in by_delim(lines, "--------Matches"):
+            if "to" not in match:
+                continue
+
+            end = len(match)
+            if "--------Unmatched old" in match:
+                end = match.index("--------Unmatched old") - 1
+
             delim = match.index("to")
             old_diag = Diagnostic(match[1:delim])
-            new_diag = Diagnostic(match[delim+1:])
+            new_diag = Diagnostic(match[delim+1:end])
 
             self.matches[old_diag] = new_diag
 
@@ -205,10 +224,14 @@ class DiagnosticsDiff:
         post = f"{self.post} {'' if self.post_commit is None else self.post_commit}"
         return f"{pre} -> {post}"
 
+    def __hash__(self):
+        return hash((self.pre_commit, self.post_commit))
+
     @classmethod
     def load_all(cls, folder: Path):
         return sorted((cls(file)
-                       for file in folder.glob("* -> *")))
+                       for file in folder.glob("* -> *")
+                       if file.is_file()))
 
 
 def get_added_diagnostics(diffs: List[DiagnosticsDiff], commit: str):
@@ -234,10 +257,6 @@ def find_when_leaves(diffs: List[DiagnosticsDiff],
 
     if diagnostic in diffs[start].unmatched_new:
         start += 1
-
-    if start == len(diffs)-1:
-        # Added at end
-        return start
 
     for cur in range(start, min(end, len(diffs))):
         file = diffs[cur]
