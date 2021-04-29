@@ -5,7 +5,7 @@ from diag_utils import DiagnosticsDiff, Diagnostic, find_when_leaves
 from pathlib import Path
 from missed_diagnostics_2 import find_missed_commits
 
-Trackers = ["character_line_tracker", "token_line_tracker", "ijm_point", "ijm_start_and_end", "ijm_joint"]
+Trackers = ["character_line_tracker", "token_line_tracker", "ijm_pos_tracker", "ijm_start_and_end", "ijm_joint"]
 
 def find_between_diffs(interleaved_diffs, lowres_diffs):
     assert len(lowres_diffs) <= len(interleaved_diffs) 
