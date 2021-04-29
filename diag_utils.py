@@ -13,6 +13,17 @@ def get_diag_type(diag_msg):
     return diag_msg.split(" ")[0]  # "[Diag-Type] other information"
 
 
+def _parse_diag_message(lines):
+    lines = lines[2:]
+    if "Signature:" in lines[-1]:
+        lines = lines[:-1]
+    if "Did you mean" in lines[-1]:
+        lines = lines[:-1]
+    if "(see" in lines[-1]:
+        lines = lines[:-1]
+    return "\n".join(lines)
+
+
 class Diagnostic:
     def __init__(self, lines):
         loc_info = lines[1].split(" ")
@@ -25,17 +36,15 @@ class Diagnostic:
         self._pos = int(loc_info[4])
         self._end = int(loc_info[5])
         self._type = get_diag_type(lines[2])
-
-        self._message = "\n".join(
-            lines[2:-1] if "Signature:" in lines[-1] else lines[2:]
-            )
+        self._message = _parse_diag_message(lines)
 
     def __eq__(self, other):
         return self._file == other._file and \
             self._line == other._line and \
             self._col == other._col and \
             self._message == other._message and \
-            (self._end - self._start) == (other._end - other._start)
+            self._start == other._start and \
+            self._end == other._end
 
     def __repr__(self):
         return f"({self._file} {self._type} {self._line} {self._col} {self._start} {self._end})"
@@ -48,7 +57,7 @@ class Diagnostic:
         ])
 
     def __hash__(self):
-        return hash((self._file, self._line, self._col, self._type, self._end - self._start))
+        return hash((self._file, self._line, self._col, self._type, self._start, self._pos, self._end))
 
     def __lt__(self, other):
         if self._file != other._file:
@@ -94,7 +103,6 @@ def read_stripped_lines(file):
 
 class DiagnosticsFile:
     def __init__(self, file: Path, seq: int, commit: str, diagnostics: List[Diagnostic]):
-        print("Loading",file)
         self.file = file
         self.seq = seq
         self.commit = commit
@@ -145,7 +153,6 @@ class DiagnosticsDiff:
     "Describes the differences in diagnostics between two commits"
 
     def __init__(self, file: Path):
-        print(file)
         self.file = file
         # "<pre> [commit] -> <post> [commit]"
         file_split = file.stem.split(" ")
