@@ -44,6 +44,7 @@ class Diagnostic:
             self._col == other._col and \
             self._message == other._message and \
             self._start == other._start and \
+            self._pos == other._pos and \
             self._end == other._end
 
     def __repr__(self):

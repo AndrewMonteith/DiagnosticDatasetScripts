@@ -53,3 +53,13 @@ if __name__ == "__main__":
                     print(new)
                     print(f"  But was not tracked over {between_diffs[leaves]}")
                     print()
+
+            for unmatched_diag in lr_diff.unmatched_old:
+                if unmatched_diag in between_diffs[0].unmatched_old:
+                    continue
+
+                leaves = find_when_leaves(between_diffs, unmatched_diag)
+                if leaves == len(between_diffs):
+                    print(f"Finding not tracked over {lr_diff} but was tracked through induviduals")
+                    print(unmatched_diag)
+

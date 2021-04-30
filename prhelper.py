@@ -5,6 +5,9 @@ import sys
 from diag_utils import Diagnostic, DiagnosticsDiff
 from pathlib import Path
 from meyersdiff import *
+from matchhelper2 import FileLoader
+
+from itertools import chain
 
 '''
     Butchered from: https://stackoverflow.com/questions/14910858/how-to-specify-where-a-tkinter-window-opens
@@ -51,12 +54,12 @@ class CustomText(tk.Text):
         # generate an event if something was added or deleted,
         # or the cursor position changed
         if (args[0] in ("insert", "replace", "delete") or
-                    args[0:3] == ("mark", "set", "insert") or
-                    args[0:2] == ("xview", "moveto") or
-                    args[0:2] == ("xview", "scroll") or
-                    args[0:2] == ("yview", "moveto") or
-                    args[0:2] == ("yview", "scroll")
-                ):
+            args[0:3] == ("mark", "set", "insert") or
+            args[0:2] == ("xview", "moveto") or
+            args[0:2] == ("xview", "scroll") or
+            args[0:2] == ("yview", "moveto") or
+            args[0:2] == ("yview", "scroll")
+            ):
             self.event_generate("<<Change>>", when="tail")
 
         # return what the actual widget returned
@@ -143,6 +146,27 @@ def add_diff_highlighting(e_old, e_new, diffs):
         line += 1
 
 
+def convert_pos_to_line_col(lines, position):
+    if type(lines) is str:
+        lines = lines.split("\n")
+    for (line_num, line) in enumerate(lines):
+        line_len = len(line) + 1
+        if position - line_len > 0:
+            position -= line_len
+        else:
+            return (line_num + 1, position)
+
+
+def highlight_text(textbox, src_lines, start, end):
+    start_line, start_col = convert_pos_to_line_col(src_lines, start)
+    end_line, end_col = convert_pos_to_line_col(src_lines, end)
+
+    tag = "tag-" + str(start) + "-" + str(end)
+    textbox.tag_add(tag, str(start_line) + "." + str(start_col),
+                    str(end_line) + "." + str(end_col))
+    textbox.tag_config(tag, foreground="yellow")
+
+
 def set_line(text, line):
     text.text.see(str(max(0, line - 3)) + ".0")
 
@@ -162,7 +186,7 @@ def ask_question(old_src: str, new_src: str, **kwargs):
     e_old.text.delete(1.0, "end")
     e_old.text.insert(1.0, ''.join(old_src))
     # e_old.text.see('158.0')
-    old_src_tk.geometry("%dx%d+%d+%d" % (ws/4, hs-250, 1920, 200))
+    old_src_tk.geometry("%dx%d+%d+%d" % (ws/2 - 20, 1080-250+5, 0, 200))
     windows.append(old_src_tk)
 
     # Dialog showing new source code
@@ -171,32 +195,37 @@ def ask_question(old_src: str, new_src: str, **kwargs):
     e_new.pack(side="top", fill="both", expand=True)
     e_new.text.delete(1.0, "end")
     e_new.text.insert(1.0, ''.join(new_src))
-    new_src_tk.geometry("%dx%d+%d+%d" % (ws/4, hs-250, 1920 + (ws/4), 200))
+    new_src_tk.geometry("%dx%d+%d+%d" % (ws/2 - 20, 1080-250+5, (ws/2), 200))
     windows.append(new_src_tk)
 
-    old_diag_window = None
-    if "old_diag" in kwargs:
-        # Dialog showing old diagnostic
-        old_diag_dialog = tk.Tk()
-        old_diag_window = Window(str(kwargs["old_diag"]), old_diag_dialog)
-        old_diag_dialog.wm_title("Old Diagnostic")
-        old_diag_dialog.geometry("%dx%d+%d+%d" % (ws/4, 150, 1920, 10))
-        windows.append(old_diag_dialog)
-
-    new_diag_window = None
-    if "new_diag" in kwargs:
-        # Dialog showing new diagnostic
-        new_diag_dialog = tk.Tk()
-        new_diag_window = Window(str(kwargs["new_diag"]), new_diag_dialog)
-        new_diag_dialog.wm_title("New Diagnostic")
-        new_diag_dialog.geometry("%dx%d+%d+%d" %
-                                 (ws/4, 150, 1920 + (ws/4), 10))
-        windows.append(new_diag_dialog)
+    add_diff_highlighting(e_old.text, e_new.text, myers_diff(old_src, new_src))
 
     old_in = "old_diag" in kwargs
     new_in = "new_diag" in kwargs
 
-    add_diff_highlighting(e_old.text, e_new.text, myers_diff(old_src, new_src))
+    old_diag_window = None
+    if old_in:
+        # Dialog showing old diagnostic
+        old_diag_dialog = tk.Tk()
+        old_diag_window = Window(str(kwargs["old_diag"]), old_diag_dialog)
+        old_diag_dialog.wm_title("Old Diagnostic in " + kwargs["old_commit"])
+        old_diag_dialog.geometry("%dx%d+%d+%d" % (ws/2 - 20, 150, 5, 10))
+        windows.append(old_diag_dialog)
+
+        highlight_text(e_old.text, old_src,
+                       kwargs["old_diag"]._start, kwargs["old_diag"]._end)
+
+    new_diag_window = None
+    if new_in:
+        # Dialog showing new diagnostic
+        new_diag_dialog = tk.Tk()
+        new_diag_window = Window(str(kwargs["new_diag"]), new_diag_dialog)
+        new_diag_dialog.wm_title("New Diagnostic in " + kwargs["new_commit"])
+        new_diag_dialog.geometry("%dx%d+%d+%d" %
+                                 (ws/2 - 20, 150, ws/2 + 5, 10))
+        windows.append(new_diag_dialog)
+        highlight_text(e_new.text, new_src,
+                       kwargs["new_diag"]._start, kwargs["new_diag"]._end)
 
     if old_in and new_in:
         set_line(e_old, kwargs["old_diag"]._line)
@@ -210,7 +239,7 @@ def ask_question(old_src: str, new_src: str, **kwargs):
             new_src, kwargs["new_diag"]._line, old_src))
         set_line(e_new, kwargs["new_diag"]._line)
 
-    response = False
+    response = None
 
     def key_pressed(event):
         global pause
@@ -227,6 +256,7 @@ def ask_question(old_src: str, new_src: str, **kwargs):
                 print(new_diag_window.text.cget("text"))
         if event.char not in ["y", "n", "s"]:
             return
+
         response = event.char
         for window in windows:
             window.destroy()
@@ -244,17 +274,24 @@ def ask_question(old_src: str, new_src: str, **kwargs):
         return None
 
 
+def prelaod_file(project, diffs):
+    diagnostics = set(chain([*diff.matches.keys(), *diff.matches.values(),
+                             *diff.unmatched_new, *diff.unmatched_new]) for diff in diffs)
+
+    return FileLoader.preload_diagnostics(project, diagnsotics)
+
+
 if __name__ == "__main__":
     project = Path(sys.argv[1])
     diff_path = Path(sys.argv[2])
     diffs = DiagnosticsDiff.load_all(diff_path)
 
     matches_to_check = sum(len(diff.matches) for diff in diffs)
-    removes_to_check = sum(len(diff.unmatched_old) for diff in diffs)
+    # moves_to_check = sum(len(diff.unmatched_old) for diff in diffs)
     adds_to_check = sum(len(diff.unmatched_new) for diff in diffs)
 
     print("Total matches ", matches_to_check)
-    print("Total removes ", removes_to_check)
+    # print("Total removes ", removes_to_check)
     print("Total adds ", adds_to_check)
 
     true_positives = 0
@@ -267,76 +304,82 @@ if __name__ == "__main__":
     skipped = 0
 
     for diff in diffs:
-        print("Checking diff", diff)
+        print("Diff", diff)
+
+        file_loader = FileLoader.load_diff(project, diff)
 
         # Check matches
         for (old, new) in diff.matches.items():
-            old_src = load_src(diff_path, diff.pre_commit, Path(old._file))
-            new_src = load_src(diff_path, diff.post_commit, Path(new._file))
+            old_src = file_loader.load(old._file, diff.pre_commit)
+            new_src = file_loader.load(new._file, diff.post_commit)
+
+            if old_src == new_src and old == new:
+                continue
 
             total_matches_checked += 1
 
             response = ask_question(
-                old_src, new_src, old_diag=old, new_diag=new)
+                old_src, new_src, old_diag=old, new_diag=new, old_commit=f"{diff.pre} {diff.pre_commit}", new_commit=f"{diff.post} {diff.post_commit}")
 
             if response == None:
                 skipped += 1
                 continue
             elif response:
+                print("TP")
+                print(old)
+                print("  to")
+                print(new)
                 true_positives += 1
             else:
-                print("False positive ", diff)
+                print("FP")
                 print(old)
+                print("  to")
                 print(new)
                 false_positives += 1
 
         # Check unmatched old
         for unmatched_old in diff.unmatched_old:
-            old_src = load_src(diff_path, diff.pre_commit,
-                               Path(unmatched_old._file))
-            new_src = load_src(diff_path, diff.post_commit,
-                               Path(unmatched_old._file))
+            old_src = file_loader.load(unmatched_old._file, diff.pre_commit)
+            new_src = file_loader.load(unmatched_old._file, diff.post_commit)
 
             if len(new_src) == 0:
                 continue
 
-            response = ask_question(old_src, new_src, old_diag=unmatched_old)
+            response = ask_question(
+                old_src, new_src, old_diag=unmatched_old, old_commit=f"{diff.pre} {diff.pre_commit}")
             if response == None:
                 skipped += 1
                 continue
 
             total_removes_checked += 1
 
-            if response:
-                true_positives += 1
-            else:
-                print("False negative", diff)
-                print(unmatched_old)
+            if response == False:
                 false_negatives += 1
+                print("FN")
+                print(unmatched_old)
 
         # Check unmatched new
-        for unmatched_new in diff.unmatched_new:
-            old_src = load_src(diff_path, diff.pre_commit,
-                               Path(unmatched_new._file))
-            new_src = load_src(diff_path, diff.post_commit,
-                               Path(unmatched_new._file))
+        # for unmatched_new in diff.unmatched_new:
+        #     old_src = file_loader.load(unmatched_new._file, diff.pre_commit)
+        #     new_src = file_loader.load(unmatched_new._file,  diff.post_commit)
 
-            if len(old_src) == 0:
-                continue
+        #     if len(old_src) == 0:
+        #         continue
 
-            total_adds_checked += 1
+        #     total_adds_checked += 1
 
-            response = ask_question(old_src, new_src, new_diag=unmatched_new)
+        #     response = ask_question(old_src, new_src, new_diag=unmatched_new)
 
-            if response == None:
-                skipped += 1
-                continue
-            elif response:
-                true_positives += 1
-            else:
-                print("False negative", diff)
-                print(unmatched_new)
-                false_negatives += 1
+        #     if response == None:
+        #         skipped += 1
+        #         continue
+
+        #     total_adds_checked += 1
+
+        #     if response == False:
+        #         print("FN")
+        #         print(unmatched_new)
+        #         false_negatives += 1
 
     print("True positives", true_positives)
     print("False positives", false_positives)

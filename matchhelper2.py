@@ -31,28 +31,56 @@ def write_helpful_diff(project: Path, diff: DiagnosticsDiff, strat: int):
 
     diff.write(output)
 
-
 class FileLoader:
     def __init__(self, project: Path, output: Path):
         self._project = project
         self._output = output
         self._files = []
-        self._loaded = set()
 
     @staticmethod
     def get_file_name(file: Path, commit: str):
-        return commit + "-" + (str(file).replace("/", "-"))
+        return
 
     @staticmethod
     def format(files):
-        subprocess.run(["java", "-jar", "google-format.jar", "-i",
-                        "--skip-sorting-imports", "--skip-removing-unused-imports",
-                        *files])
+        if len(files) == 0:
+            return
+
+        def chunks(lst, n):
+            """Yield successive n-sized chunks from lst."""
+            for i in range(0, len(lst), n):
+                yield lst[i:i + n]
+
+        for files_to_format in chunks(files, 500):
+            subprocess.run(["java", "-jar", "google-format.jar", "-i",
+                            "--skip-sorting-imports", "--skip-removing-unused-imports",
+                            *files_to_format])
+
+    @staticmethod
+    def load_diff(project, diff):
+        f = FileLoader(project, Path("dump") / project.name)
+
+        for (old, new) in diff.matches.items():
+            f.load(old._file, diff.pre_commit)
+            f.load(new._file, diff.post_commit)
+
+        for unmatched_old in diff.unmatched_old:
+            f.load(unmatched_old._file, diff.pre_commit)
+
+        for unmatched_new in diff.unmatched_new:
+            f.load(unmatched_new._file, diff.post_commit)
+
+        f.format_files()
+
+        return f
+
+    def _get_file_path(self, file: Path, commit: str):
+        return self._output / (commit + "-" + (str(file).replace("/", "-")))
 
     def _load_formatted(self, file: Path, commit: str):
         src, loaded = githelpers.load_file(self._project, commit, file)
 
-        output_file = self._output / FileLoader.get_file_name(file, commit)
+        output_file = self._get_file_path(file, commit)
         self._files.append((output_file, loaded))
 
         with open(output_file, "w") as f:
@@ -63,13 +91,12 @@ class FileLoader:
     def load(self, file: str, commit: str):
         file = Path(file)
 
-        filename = FileLoader.get_file_name(file, commit)
-        if filename not in self._loaded:
-            self._loaded.add(FileLoader.get_file_name(file, commit))
+        formatted_file = self._get_file_path(file, commit)
+
+        if not formatted_file.exists():
             self._load_formatted(file, commit)
 
-        return open(self._output / FileLoader.get_file_name(file, commit), "r").read()
-
+        return open(formatted_file, "r").read()
 
     @property
     def formattable_files(self):
@@ -81,7 +108,6 @@ class FileLoader:
 
     def format_files(self):
         FileLoader.format(self.formattable_files)
-        
 
 
 def write_touched_files(project: Path, diff: DiagnosticsDiff, output: Path):
